@@ -4,6 +4,11 @@ from binance.client import Client
 from dotenv import load_dotenv
 import os
 import logging
+from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, Float, DateTime
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.declarative import declarative_base
+from datetime import datetime
+from sqlalchemy.types import Boolean
 
 # Load environment variables
 load_dotenv()
@@ -22,6 +27,30 @@ WEBHOOK_PASSPHRASE = os.getenv('WEBHOOK_PASSPHRASE')
 # Initialize Binance client
 client = Client(API_KEY, API_SECRET, testnet=True)
 client.FUTURES_URL = 'https://testnet.binancefuture.com/fapi'  # For testnet
+
+#  Database Configuration
+DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///trading_bot.db')
+engine = create_engine(DATABASE_URL)
+Base = declarative_base()
+
+# Define a Trade Model
+class Trade(Base):
+    __tablename__ = 'trades'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    symbol = Column(String)
+    side = Column(String)
+    type = Column(String)
+    quantity = Column(Float)
+    price = Column(Float)
+    leverage = Column(Integer)
+    reduceOnly = Column(String)
+    timeInForce = Column(String)
+    status = Column(String)
+    timestamp = Column(DateTime, default=datetime.now)
+
+# Create the database tables
+Base.metadata.create_all(bind=engine)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # Define the payload schema
 class WebhookPayload(BaseModel):
@@ -67,17 +96,32 @@ async def webhook(payload: WebhookPayload):
             logging.error(f"Invalid action received: {action}")
             raise HTTPException(status_code=400, detail="Invalid action")
 
-        order = client.futures_create_order(
-            symbol=symbol,
-            side=side,
-            type=order_type,
-            quantity=quantity,
-            price=limit_price,
-            reduceOnly='true' if reduce_only else 'false',
-            timeInForce='GTC' if order_type == 'LIMIT' else None
-        )
+        order_params = {
+            'symbol': symbol,
+            'side': side,
+            'type': order_type,
+            'quantity': quantity,
+            'reduceOnly': 'true' if reduce_only else 'false'
+        }
+
+        if order_type == 'LIMIT':
+            order_params['price'] = limit_price
+            order_params['timeInForce'] = 'GTC'
+
+        logging.info(f"Order params: {order_params}")
+        order = client.futures_create_order(**order_params)
 
         logging.info(f"Order executed: {order}")
+
+        # Save the trade to the database
+        db = SessionLocal()
+        trade = Trade(**order_params, status='EXECUTED', leverage=payload.leverage)
+        db.add(trade)
+        db.commit()
+        db.refresh(trade)
+        db.close()
+
+
         return {"status": "success", "order": order}
 
     except Exception as e:
@@ -119,4 +163,16 @@ async def get_position_info(symbol: str):
         return {"status": "success", "position_info": positions}
     except Exception as e:
         logging.error(f"Error fetching position info for {symbol}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Endpoint to fetch all trades
+@app.get("/trades", tags=["trades"], summary="Get all trades")
+async def get_trade_history():
+    try:
+        db = SessionLocal()
+        trades = db.query(Trade).order_by(Trade.timestamp.desc()).all()
+        db.close()
+        return {"status": "success", "trades": trades}
+    except Exception as e:
+        logging.error(f"Error fetching trade history: {e}")
         raise HTTPException(status_code=500, detail=str(e))

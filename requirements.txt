@@ -3,3 +3,4 @@ uvicorn[standard]
 python-binance
 pydantic
 python-dotenv
+SQLAlchemy
