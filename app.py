@@ -9,6 +9,8 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
 from sqlalchemy.types import Boolean
+from typing import Optional,List,Union
+from pydantic import BaseModel
 
 # Load environment variables
 load_dotenv()
@@ -32,6 +34,102 @@ client.FUTURES_URL = 'https://testnet.binancefuture.com/fapi'  # For testnet
 DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///trading_bot.db')
 engine = create_engine(DATABASE_URL)
 Base = declarative_base()
+
+
+class OrderResponseModel(BaseModel):
+    orderId: int
+    symbol: str
+    status: str
+    clientOrderId: str
+    price: str
+    avgPrice: str
+    origQty: str
+    executedQty: str
+    cumQty: str
+    cumQuote: str
+    timeInForce: str
+    type: str
+    reduceOnly: bool
+    closePosition: bool
+    side: str
+    positionSide: str
+    stopPrice: str
+    workingType: str
+    priceProtect: bool
+    origType: str
+    priceMatch: str
+    selfTradePreventionMode: str
+    goodTillDate: int
+    updateTime: int
+
+class WebhookResponseModel(BaseModel):
+    status: str
+    order: OrderResponseModel
+
+# Define the balance response model for /account/balance
+class BalanceModel(BaseModel):
+    accountAlias: str
+    asset: str
+    balance: str
+    crossWalletBalance: str
+    crossUnPnl: str
+    availableBalance: str
+    maxWithdrawAmount: str
+    marginAvailable: bool
+    updateTime: int
+
+class BalanceResponseModel(BaseModel):
+    status: str
+    balance: BalanceModel
+
+# Define the position model for /account/positions and /account/position/{symbol}
+class PositionModel(BaseModel):
+    symbol: str
+    positionSide: str
+    positionAmt: str
+    entryPrice: str
+    breakEvenPrice: str
+    markPrice: str
+    unRealizedProfit: str
+    liquidationPrice: str
+    isolatedMargin: str
+    notional: str
+    marginAsset: str
+    isolatedWallet: str
+    initialMargin: str
+    maintMargin: str
+    positionInitialMargin: str
+    openOrderInitialMargin: str
+    adl: int
+    bidNotional: str
+    askNotional: str
+    updateTime: int
+
+class PositionsResponseModel(BaseModel):
+    status: str
+    open_positions: List[PositionModel]
+
+class PositionInfoResponseModel(BaseModel):
+    status: str
+    position_info: List[PositionModel]
+
+# Define the trade history model for /trades
+class TradeModel(BaseModel):
+    id: int
+    symbol: str
+    side: str
+    type: str
+    quantity: float
+    price: float
+    leverage: int
+    reduceOnly: str
+    timeInForce: str
+    status: str
+    timestamp: datetime
+
+class TradesResponseModel(BaseModel):
+    status: str
+    trades: List[TradeModel]
 
 # Define a Trade Model
 class Trade(Base):
@@ -62,7 +160,7 @@ class WebhookPayload(BaseModel):
     leverage: int = 1
 
 # Define the webhook endpoint
-@app.post("/webhook", tags=["trading"], summary="Execute a trading action")
+@app.post("/webhook", tags=["trading"], summary="Execute a trading action", response_model=WebhookResponseModel)
 async def webhook(payload: WebhookPayload):
     if payload.passphrase != WEBHOOK_PASSPHRASE:
         logging.warning("Unauthorized access attempt with incorrect passphrase.")
@@ -129,7 +227,7 @@ async def webhook(payload: WebhookPayload):
         raise HTTPException(status_code=500, detail=str(e))
 
 # Get USDT balance
-@app.get("/account/balance", tags=["account"], summary="Get USDT balance")
+@app.get("/account/balance", tags=["account"], summary="Get USDT balance", response_model=BalanceResponseModel)
 async def get_usdt_balance():
     try:
         account_info = client.futures_account_balance()
@@ -145,7 +243,7 @@ async def get_usdt_balance():
 
 
 # Endpoint to fetch open positions
-@app.get("/account/positions", tags=["account"], summary="Get open positions")
+@app.get("/account/positions", tags=["account"], summary="Get open positions", response_model=PositionsResponseModel)
 async def get_open_positions():
     try:
         positions = client.futures_position_information()
@@ -156,7 +254,7 @@ async def get_open_positions():
         raise HTTPException(status_code=500, detail=str(e))
 
 # Endpoint to fetch position information by symbol
-@app.get("/account/position/{symbol}", tags=["account"], summary="Get position information for a symbol")
+@app.get("/account/position/{symbol}", tags=["account"], summary="Get position information for a symbol", response_model=PositionInfoResponseModel)
 async def get_position_info(symbol: str):
     try:
         positions = client.futures_position_information(symbol=symbol.upper())
@@ -166,7 +264,7 @@ async def get_position_info(symbol: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 # Endpoint to fetch all trades
-@app.get("/trades", tags=["trades"], summary="Get all trades")
+@app.get("/trades", tags=["trades"], summary="Get all trades", response_model=TradesResponseModel)
 async def get_trade_history():
     try:
         db = SessionLocal()
