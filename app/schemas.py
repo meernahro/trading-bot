@@ -105,3 +105,13 @@ class TradeModel(BaseModel):
 class TradesResponseModel(BaseModel):
     status: str
     trades: List[TradeModel]
+
+class BalanceDBModel(BaseModel):
+    id: int
+    asset: str
+    balance: float
+    available_balance: float
+    timestamp: datetime
+
+    class Config:
+        orm_mode = True

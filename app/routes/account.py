@@ -1,21 +1,33 @@
 # app/routes/account.py
 
-from fastapi import APIRouter, HTTPException
-from .. import schemas
+from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy.orm import Session
+from .. import schemas, crud
 from ..binanceClient import client
+from ..database import SessionLocal
 from ..utils.customLogger import get_logger
 
 logging = get_logger(name="account")
 router = APIRouter()
 
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
 @router.get("/account/balance", tags=["account"], summary="Get USDT balance", response_model=schemas.BalanceResponseModel)
-async def get_usdt_balance():
+async def get_usdt_balance(db: Session = Depends(get_db)):
     try:
         account_info = client.futures_account_balance()
         usdt_balance = next((asset for asset in account_info if asset["asset"] == "USDT"), None)
         
         if not usdt_balance:
             return {"status": "error", "message": "USDT balance not found"}
+
+        # Save balance to database
+        crud.create_balance(db, usdt_balance)
 
         return {"status": "success", "balance": usdt_balance}
     except Exception as e:

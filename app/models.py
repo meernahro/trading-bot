@@ -17,3 +17,11 @@ class Trade(Base):
     timeInForce = Column(String)
     status = Column(String)
     timestamp = Column(DateTime, default=datetime.utcnow)
+
+class Balance(Base):
+    __tablename__ = 'balances'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    asset = Column(String)
+    balance = Column(Float)
+    available_balance = Column(Float)
+    timestamp = Column(DateTime, default=datetime.utcnow)
