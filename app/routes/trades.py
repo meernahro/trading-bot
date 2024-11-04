@@ -4,7 +4,9 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from .. import schemas, crud
 from ..database import SessionLocal
-from ..utils import logging
+from ..utils.customLogger import get_logger
+
+logging = get_logger(name="trades")
 
 router = APIRouter()
 

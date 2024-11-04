@@ -2,8 +2,10 @@
 
 from fastapi import APIRouter, HTTPException
 from .. import schemas
-from ..utils import client, logging
+from ..binanceClient import Client
+from ..utils.customLogger import get_logger
 
+logging = get_logger(name="account")
 router = APIRouter()
 
 @router.get("/account/balance", tags=["account"], summary="Get USDT balance", response_model=schemas.BalanceResponseModel)

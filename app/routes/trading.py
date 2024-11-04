@@ -3,10 +3,12 @@
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from .. import schemas, crud
-from ..utils import client, logging
+from ..binanceClient import client
 from ..database import SessionLocal
 from ..config import WEBHOOK_PASSPHRASE
+from ..utils.customLogger import get_logger
 
+logging = get_logger(name="trading")
 router = APIRouter()
 
 # Dependency to get DB session

@@ -1,4 +1,4 @@
-# app/utils.py
+# app/binanceClient.py
 
 import logging
 from binance.client import Client

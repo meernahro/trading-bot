@@ -5,3 +5,4 @@ python-binance
 pydantic
 python-dotenv
 SQLAlchemy
+colorama
