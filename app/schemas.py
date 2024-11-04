@@ -115,3 +115,23 @@ class BalanceDBModel(BaseModel):
 
     class Config:
         orm_mode = True
+
+# Add this new model
+class PositionDBModel(BaseModel):
+    id: int
+    symbol: str
+    positionSide: str
+    positionAmt: float
+    entryPrice: float
+    breakEvenPrice: float
+    markPrice: float
+    unRealizedProfit: float
+    liquidationPrice: float
+    notional: float
+    marginAsset: str
+    initialMargin: float
+    maintMargin: float
+    timestamp: datetime
+
+    class Config:
+        orm_mode = True

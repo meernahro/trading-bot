@@ -41,11 +41,16 @@ async def get_all_db_records(db: Session = Depends(get_db)):
         balances = db.query(models.Balance).order_by(models.Balance.timestamp.desc()).all()
         balances_list = [{k: v for k, v in balance.__dict__.items() if not k.startswith('_')} for balance in balances]
         
+        # Get all positions
+        positions = db.query(models.Position).order_by(models.Position.timestamp.desc()).all()
+        positions_list = [{k: v for k, v in position.__dict__.items() if not k.startswith('_')} for position in positions]
+        
         return {
             "status": "success",
             "data": {
                 "trades": trades_list,
-                "balances": balances_list
+                "balances": balances_list,
+                "positions": positions_list
             }
         }
     except Exception as e:

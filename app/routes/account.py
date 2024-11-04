@@ -35,10 +35,14 @@ async def get_usdt_balance(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/account/positions", tags=["account"], summary="Get open positions", response_model=schemas.PositionsResponseModel)
-async def get_open_positions():
+async def get_open_positions(db: Session = Depends(get_db)):
     try:
         positions = client.futures_position_information()
         open_positions = [pos for pos in positions if float(pos['positionAmt']) != 0]
+        
+        # Save positions to database
+        crud.save_positions(db, open_positions)
+        
         return {"status": "success", "open_positions": open_positions}
     except Exception as e:
         logging.error(f"Error fetching open positions: {e}")

@@ -45,3 +45,31 @@ def get_latest_balance(db: Session, asset: str):
         .filter(models.Balance.asset == asset)\
         .order_by(models.Balance.timestamp.desc())\
         .first()
+
+def save_positions(db: Session, positions_data: list):
+    # First, delete all existing positions
+    db.query(models.Position).delete()
+    
+    # Then insert new positions if any exist
+    for position in positions_data:
+        position_model = models.Position(
+            symbol=position["symbol"],
+            positionSide=position["positionSide"],
+            positionAmt=float(position["positionAmt"]),
+            entryPrice=float(position["entryPrice"]),
+            breakEvenPrice=float(position["breakEvenPrice"]),
+            markPrice=float(position["markPrice"]),
+            unRealizedProfit=float(position["unRealizedProfit"]),
+            liquidationPrice=float(position["liquidationPrice"]),
+            notional=float(position["notional"]),
+            marginAsset=position["marginAsset"],
+            initialMargin=float(position["initialMargin"]),
+            maintMargin=float(position["maintMargin"]),
+            timestamp=datetime.utcnow()
+        )
+        db.add(position_model)
+    
+    db.commit()
+
+def get_positions(db: Session):
+    return db.query(models.Position).all()
