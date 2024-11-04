@@ -6,3 +6,6 @@ pydantic
 python-dotenv
 SQLAlchemy
 colorama
+python-multipart
+python-jose[cryptography]
+passlib[bcrypt]

@@ -15,8 +15,3 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the working directory contents into the container.
 COPY . .
 
-# Expose port 80 for the web server.
-EXPOSE 80
-
-# Run the application.
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "80"]
