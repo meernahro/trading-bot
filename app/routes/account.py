@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException
 from .. import schemas
-from ..binanceClient import Client
+from ..binanceClient import client
 from ..utils.customLogger import get_logger
 
 logging = get_logger(name="account")
