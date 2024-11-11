@@ -5,32 +5,36 @@ from . import models
 from datetime import datetime
 from .utils.exceptions import DatabaseError
 
-def create_trade(db: Session, trade_data: dict):
+def create_trade(db: Session, trade_data: dict, user_id: int):
+    trade_data['user_id'] = user_id
     trade = models.Trade(**trade_data)
     db.add(trade)
     db.commit()
     db.refresh(trade)
     return trade
 
-def get_trades(db: Session):
-    return db.query(models.Trade).order_by(models.Trade.timestamp.desc()).all()
+def get_trades(db: Session, user_id: int):
+    return db.query(models.Trade)\
+        .filter(models.Trade.user_id == user_id)\
+        .order_by(models.Trade.timestamp.desc())\
+        .all()
 
-def create_balance(db: Session, balance_data: dict):
-    # Check if balance exists for this asset
+def create_balance(db: Session, balance_data: dict, user_id: int):
+    # Check if balance exists for this asset and user
     existing_balance = db.query(models.Balance).filter(
-        models.Balance.asset == balance_data["asset"]
+        models.Balance.asset == balance_data["asset"],
+        models.Balance.user_id == user_id
     ).first()
     
     if existing_balance:
-        # Update existing balance
         existing_balance.balance = float(balance_data["balance"])
         existing_balance.available_balance = float(balance_data["availableBalance"])
         existing_balance.timestamp = datetime.utcnow()
         db.commit()
         return existing_balance
     else:
-        # Create new balance if none exists
         balance = models.Balance(
+            user_id=user_id,
             asset=balance_data["asset"],
             balance=float(balance_data["balance"]),
             available_balance=float(balance_data["availableBalance"]),
@@ -47,13 +51,16 @@ def get_latest_balance(db: Session, asset: str):
         .order_by(models.Balance.timestamp.desc())\
         .first()
 
-def save_positions(db: Session, positions_data: list):
-    # First, delete all existing positions
-    db.query(models.Position).delete()
+def save_positions(db: Session, positions_data: list, user_id: int):
+    # Delete existing positions for this user
+    db.query(models.Position)\
+        .filter(models.Position.user_id == user_id)\
+        .delete()
     
-    # Then insert new positions if any exist
+    # Insert new positions
     for position in positions_data:
         position_model = models.Position(
+            user_id=user_id,
             symbol=position["symbol"],
             positionSide=position["positionSide"],
             positionAmt=float(position["positionAmt"]),

@@ -20,10 +20,14 @@ def get_db():
     finally:
         db.close()
 
-@router.get("/trades", tags=["trades"], summary="Get all trades", response_model=schemas.TradesResponseModel)
-async def get_trade_history(db: Session = Depends(get_db)):
+@router.get("/trades/{username}", tags=["trades"], summary="Get all trades", response_model=schemas.TradesResponseModel)
+async def get_trade_history(username: str, db: Session = Depends(get_db)):
     try:
-        trades = crud.get_trades(db)
+        user = crud.get_user(db, username)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+            
+        trades = crud.get_trades(db, user.id)
         trades_list = []
         for trade in trades:
             trade_dict = {
@@ -34,9 +38,9 @@ async def get_trade_history(db: Session = Depends(get_db)):
                 "quantity": trade.quantity,
                 "price": trade.price,
                 "leverage": trade.leverage,
-                "reduceOnly": str(trade.reduce_only),  # Convert boolean to string
-                "timeInForce": "GTC",  # Default value
-                "status": "FILLED",  # Default value for historical trades
+                "reduceOnly": str(trade.reduce_only),
+                "timeInForce": "GTC",
+                "status": "FILLED",
                 "timestamp": trade.timestamp
             }
             trades_list.append(trade_dict)
@@ -48,19 +52,7 @@ async def get_trade_history(db: Session = Depends(get_db)):
 @router.get("/test/db", tags=["test"], summary="Get all database records")
 async def get_all_db_records(db: Session = Depends(get_db)):
     try:
-        # Get all trades
-        trades = crud.get_trades(db)
-        trades_list = [{k: v for k, v in trade.__dict__.items() if not k.startswith('_')} for trade in trades]
-        
-        # Get all balances
-        balances = db.query(models.Balance).order_by(models.Balance.timestamp.desc()).all()
-        balances_list = [{k: v for k, v in balance.__dict__.items() if not k.startswith('_')} for balance in balances]
-        
-        # Get all positions
-        positions = db.query(models.Position).order_by(models.Position.timestamp.desc()).all()
-        positions_list = [{k: v for k, v in position.__dict__.items() if not k.startswith('_')} for position in positions]
-        
-        # Get all users (excluding sensitive data)
+        # Get all users first
         users = db.query(models.User).all()
         users_list = [{
             'id': user.id,
@@ -70,13 +62,28 @@ async def get_all_db_records(db: Session = Depends(get_db)):
             'timestamp': user.timestamp
         } for user in users]
         
+        # Get all trades for all users
+        all_trades = []
+        for user in users:
+            trades = crud.get_trades(db, user.id)
+            trades_list = [{k: v for k, v in trade.__dict__.items() if not k.startswith('_')} for trade in trades]
+            all_trades.extend(trades_list)
+        
+        # Get all balances
+        balances = db.query(models.Balance).order_by(models.Balance.timestamp.desc()).all()
+        balances_list = [{k: v for k, v in balance.__dict__.items() if not k.startswith('_')} for balance in balances]
+        
+        # Get all positions
+        positions = db.query(models.Position).order_by(models.Position.timestamp.desc()).all()
+        positions_list = [{k: v for k, v in position.__dict__.items() if not k.startswith('_')} for position in positions]
+        
         return {
             "status": "success",
             "data": {
-                "trades": trades_list,
+                "users": users_list,
+                "trades": all_trades,
                 "balances": balances_list,
-                "positions": positions_list,
-                "users": users_list
+                "positions": positions_list
             }
         }
     except Exception as e:

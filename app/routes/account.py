@@ -39,7 +39,7 @@ async def get_usdt_balance(username: str, db: Session = Depends(get_db)):
             if not usdt_balance:
                 raise HTTPException(status_code=404, detail="USDT balance not found")
 
-            crud.create_balance(db, usdt_balance)
+            crud.create_balance(db, usdt_balance, user.id)
             return {"status": "success", "balance": usdt_balance}
             
         except Exception as e:
@@ -62,8 +62,8 @@ async def get_open_positions(username: str, db: Session = Depends(get_db)):
         positions = client.futures_position_information()
         open_positions = [pos for pos in positions if float(pos['positionAmt']) != 0]
         
-        # Save positions to database
-        crud.save_positions(db, open_positions)
+        # Pass user_id to save_positions
+        crud.save_positions(db, open_positions, user.id)
         
         return {"status": "success", "open_positions": open_positions}
     except Exception as e:

@@ -91,6 +91,7 @@ async def webhook(payload: schemas.WebhookPayload, db: Session = Depends(get_db)
             
             # Database trade record
             db_trade = Trade(
+                user_id=user.id,
                 symbol=symbol,
                 side=side,
                 quantity=quantity,
