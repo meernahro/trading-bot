@@ -9,14 +9,15 @@ class Trade(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     symbol = Column(String)
     side = Column(String)
-    type = Column(String)
     quantity = Column(Float)
     price = Column(Float)
+    type = Column(String)
+    reduce_only = Column(Boolean, name='reduce_only')
     leverage = Column(Integer)
-    reduceOnly = Column(String)
-    timeInForce = Column(String)
-    status = Column(String)
     timestamp = Column(DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<Trade {self.symbol} {self.side} {self.quantity}>"
 
 class Balance(Base):
     __tablename__ = 'balances'
@@ -41,4 +42,14 @@ class Position(Base):
     marginAsset = Column(String)
     initialMargin = Column(Float)
     maintMargin = Column(Float)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
+class User(Base):
+    __tablename__ = 'users'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    username = Column(String, unique=True)
+    exchange = Column(String)  # 'binance', etc.
+    market_type = Column(String)  # 'spot' or 'futures'
+    api_key = Column(String)
+    api_secret = Column(String)
     timestamp = Column(DateTime, default=datetime.utcnow)

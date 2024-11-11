@@ -6,6 +6,7 @@ from datetime import datetime
 
 # Request payload schema
 class WebhookPayload(BaseModel):
+    username: str
     passphrase: str
     action: str
     symbol: str
@@ -98,9 +99,12 @@ class TradeModel(BaseModel):
     price: float
     leverage: int
     reduceOnly: str
-    timeInForce: str
-    status: str
+    timeInForce: str = "GTC"
+    status: str = "FILLED"
     timestamp: datetime
+
+    class Config:
+        orm_mode = True
 
 class TradesResponseModel(BaseModel):
     status: str
@@ -131,6 +135,23 @@ class PositionDBModel(BaseModel):
     marginAsset: str
     initialMargin: float
     maintMargin: float
+    timestamp: datetime
+
+    class Config:
+        orm_mode = True
+
+class UserCreate(BaseModel):
+    username: str
+    exchange: str
+    market_type: str
+    api_key: str
+    api_secret: str
+
+class UserResponse(BaseModel):
+    id: int
+    username: str
+    exchange: str
+    market_type: str
     timestamp: datetime
 
     class Config:

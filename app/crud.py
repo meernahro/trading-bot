@@ -3,6 +3,7 @@
 from sqlalchemy.orm import Session
 from . import models
 from datetime import datetime
+from .utils.exceptions import DatabaseError
 
 def create_trade(db: Session, trade_data: dict):
     trade = models.Trade(**trade_data)
@@ -73,3 +74,19 @@ def save_positions(db: Session, positions_data: list):
 
 def get_positions(db: Session):
     return db.query(models.Position).all()
+
+def create_user(db: Session, user_data: dict):
+    user = models.User(**user_data)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+def get_user(db: Session, username: str):
+    try:
+        return db.query(models.User).filter(models.User.username == username).first()
+    except Exception as e:
+        raise DatabaseError(str(e))
+
+def get_users(db: Session):
+    return db.query(models.User).all()

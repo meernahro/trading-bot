@@ -1,7 +1,7 @@
 # app/__init__.py
 
 from fastapi import FastAPI
-from .routes import trading, account, trades
+from .routes import trading, account, trades, users
 from .database import Base, engine
 
 # Create the database tables
@@ -13,3 +13,4 @@ app = FastAPI(title="Binance Futures Webhook", description="Webhook for Binance 
 app.include_router(trading.router)
 app.include_router(account.router)
 app.include_router(trades.router)
+app.include_router(users.router)
