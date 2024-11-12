@@ -1,92 +1,164 @@
 # app/routes/trades.py
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.orm import Session
 from .. import schemas, crud
-from ..database import SessionLocal
+from ..database import get_db
+from ..utils.exceptions import DatabaseError
 from ..utils.customLogger import get_logger
-from ..models import Balance
-from .. import models
+from typing import Optional
+from datetime import datetime, timedelta
 
-logging = get_logger(name="trades")
+logger = get_logger(name="trades")
+router = APIRouter(prefix="/trades", tags=["trades"])
 
-router = APIRouter()
-
-# Dependency to get DB session
-def get_db():
-    db = SessionLocal()
+@router.get("/account/{account_id}", response_model=schemas.TradeListResponse)
+async def get_account_trades(
+    account_id: int,
+    skip: int = 0,
+    limit: int = 100,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Get trades for a specific trading account with optional date filtering
+    """
     try:
-        yield db
-    finally:
-        db.close()
+        # Verify account exists
+        account = crud.get_trading_account(db, account_id)
+        if not account:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Trading account {account_id} not found"
+            )
 
-@router.get("/trades/{username}", tags=["trades"], summary="Get all trades", response_model=schemas.TradesResponseModel)
-async def get_trade_history(username: str, db: Session = Depends(get_db)):
+        trades = crud.get_account_trades(db, account_id, skip=skip, limit=limit)
+        
+        # Filter by date if provided
+        if start_date or end_date:
+            filtered_trades = []
+            for trade in trades:
+                if start_date and trade.timestamp < start_date:
+                    continue
+                if end_date and trade.timestamp > end_date:
+                    continue
+                filtered_trades.append(trade)
+            trades = filtered_trades
+
+        return {"status": "success", "trades": trades}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching trades for account {account_id}: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+@router.get("/user/{username}", response_model=schemas.TradeListResponse)
+async def get_user_trades(
+    username: str,
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db)
+):
+    """
+    Get trades for all accounts belonging to a user
+    """
     try:
+        # Verify user exists
         user = crud.get_user(db, username)
         if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-            
-        trades = crud.get_trades(db, user.id)
-        trades_list = []
-        for trade in trades:
-            trade_dict = {
-                "id": trade.id,
-                "symbol": trade.symbol,
-                "side": trade.side,
-                "type": trade.type,
-                "quantity": trade.quantity,
-                "price": trade.price,
-                "leverage": trade.leverage,
-                "reduceOnly": str(trade.reduce_only),
-                "timeInForce": "GTC",
-                "status": "FILLED",
-                "timestamp": trade.timestamp
-            }
-            trades_list.append(trade_dict)
-        return {"status": "success", "trades": trades_list}
-    except Exception as e:
-        logging.error(f"Error fetching trade history: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User {username} not found"
+            )
 
-@router.get("/test/db", tags=["test"], summary="Get all database records")
-async def get_all_db_records(db: Session = Depends(get_db)):
-    try:
-        # Get all users first
-        users = db.query(models.User).all()
-        users_list = [{
-            'id': user.id,
-            'username': user.username,
-            'exchange': user.exchange,
-            'market_type': user.market_type,
-            'timestamp': user.timestamp
-        } for user in users]
+        # Get all user's trading accounts
+        accounts = crud.get_user_trading_accounts(db, user.id)
         
-        # Get all trades for all users
+        # Collect trades from all accounts
         all_trades = []
-        for user in users:
-            trades = crud.get_trades(db, user.id)
-            trades_list = [{k: v for k, v in trade.__dict__.items() if not k.startswith('_')} for trade in trades]
-            all_trades.extend(trades_list)
+        for account in accounts:
+            trades = crud.get_account_trades(db, account.id, skip=skip, limit=limit)
+            all_trades.extend(trades)
         
-        # Get all balances
-        balances = db.query(models.Balance).order_by(models.Balance.timestamp.desc()).all()
-        balances_list = [{k: v for k, v in balance.__dict__.items() if not k.startswith('_')} for balance in balances]
+        # Sort trades by timestamp (newest first)
+        all_trades.sort(key=lambda x: x.timestamp, reverse=True)
         
-        # Get all positions
-        positions = db.query(models.Position).order_by(models.Position.timestamp.desc()).all()
-        positions_list = [{k: v for k, v in position.__dict__.items() if not k.startswith('_')} for position in positions]
+        # Apply skip and limit to the combined results
+        all_trades = all_trades[skip:skip + limit]
+
+        return {"status": "success", "trades": all_trades}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching trades for user {username}: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+@router.get("/stats/account/{account_id}", response_model=schemas.TradeStatsResponse)
+async def get_account_trade_stats(
+    account_id: int,
+    period: Optional[str] = "all",  # "day", "week", "month", "year", "all"
+    db: Session = Depends(get_db)
+):
+    """
+    Get trading statistics for a specific account
+    """
+    try:
+        # Verify account exists
+        account = crud.get_trading_account(db, account_id)
+        if not account:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Trading account {account_id} not found"
+            )
+
+        # Calculate date range
+        end_date = datetime.utcnow()
+        if period == "day":
+            start_date = end_date - timedelta(days=1)
+        elif period == "week":
+            start_date = end_date - timedelta(weeks=1)
+        elif period == "month":
+            start_date = end_date - timedelta(days=30)
+        elif period == "year":
+            start_date = end_date - timedelta(days=365)
+        else:  # "all"
+            start_date = None
+
+        # Get trades within the period
+        trades = crud.get_account_trades(db, account_id)
+        filtered_trades = [
+            trade for trade in trades
+            if not start_date or trade.timestamp >= start_date
+        ]
+
+        # Calculate statistics
+        total_trades = len(filtered_trades)
+        total_volume = sum(trade.quantity * trade.price for trade in filtered_trades)
         
+        # Calculate win rate and other metrics
+        winning_trades = len([
+            trade for trade in filtered_trades
+            if (trade.side == "BUY" and trade.price < trade.close_price) or
+               (trade.side == "SELL" and trade.price > trade.close_price)
+        ])
+        
+        win_rate = (winning_trades / total_trades * 100) if total_trades > 0 else 0
+
         return {
             "status": "success",
-            "data": {
-                "users": users_list,
-                "trades": all_trades,
-                "balances": balances_list,
-                "positions": positions_list
+            "stats": {
+                "period": period,
+                "total_trades": total_trades,
+                "total_volume": total_volume,
+                "win_rate": win_rate,
+                "start_date": start_date,
+                "end_date": end_date
             }
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        logging.error(f"Error fetching database records: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error fetching trade stats for account {account_id}: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 

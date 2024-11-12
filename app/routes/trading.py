@@ -1,45 +1,44 @@
 # app/routes/trading.py
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.orm import Session
 from .. import schemas, crud
-from ..database import SessionLocal
-from ..config import WEBHOOK_PASSPHRASE
+from ..database import get_db
+from ..utils.exceptions import DatabaseError, UserNotFoundError, InvalidCredentialsError, BinanceAPIError
 from ..utils.customLogger import get_logger
 from ..binanceClient import create_client
-from ..config import ENVIRONMENT
-from ..utils.exceptions import (
-    DatabaseError,
-    UserNotFoundError,
-    InvalidCredentialsError,
-    BinanceAPIError
-)
-from datetime import datetime
-from ..models import Trade
+from ..config import WEBHOOK_PASSPHRASE, ENVIRONMENT
 
-logging = get_logger(name="trading")
-router = APIRouter()
+logger = get_logger(name="trading")
+router = APIRouter(prefix="/trading", tags=["trading"])
 
-# Dependency to get DB session
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-@router.post("/webhook", tags=["trading"], summary="Execute a trading action", response_model=schemas.WebhookResponseModel)
+@router.post("/webhook", response_model=schemas.WebhookResponseModel)
 async def webhook(payload: schemas.WebhookPayload, db: Session = Depends(get_db)):
     try:
         if payload.passphrase != WEBHOOK_PASSPHRASE:
             raise InvalidCredentialsError()
 
-        user = crud.get_user(db, payload.username)
-        if not user:
-            raise UserNotFoundError(payload.username)
+        # Get the trading account
+        account = crud.get_trading_account(db, payload.account_id)
+        if not account:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Trading account {payload.account_id} not found"
+            )
+        
+        # Verify account status
+        if account.status != schemas.AccountStatus.ACTIVE:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Trading account {payload.account_id} is not active"
+            )
         
         try:
-            client = create_client(user.api_key, user.api_secret, ENVIRONMENT)
+            client = create_client(
+                account.api_key, 
+                account.api_secret, 
+                ENVIRONMENT if not account.is_testnet else 'development'
+            )
         except Exception as e:
             raise BinanceAPIError(f"Failed to create Binance client: {str(e)}")
 
@@ -69,55 +68,38 @@ async def webhook(payload: schemas.WebhookPayload, db: Session = Depends(get_db)
             else:
                 raise HTTPException(status_code=400, detail=f"Invalid action: {action}")
 
-            # Binance order parameters
-            order_params = {
-                "symbol": symbol,
-                "side": side,
-                "type": order_type,
-                "quantity": quantity,
-                "reduceOnly": reduce_only  # Binance API uses camelCase
-            }
+            # Place the order
+            order = client.futures_create_order(
+                symbol=symbol,
+                side=side,
+                type=order_type,
+                quantity=quantity,
+                price=price if order_type == 'LIMIT' else None,
+                reduceOnly=reduce_only,
+                timeInForce='GTC' if order_type == 'LIMIT' else None
+            )
 
-            # Add price for limit orders
-            if order_type == 'LIMIT':
-                order_params["price"] = float(price)
-                order_params["timeInForce"] = 'GTC'
-
-            # Execute the order
-            order = client.futures_create_order(**order_params)
-            
-            # Get the executed price
-            executed_price = float(order.get("avgPrice", 0)) or float(order.get("price", 0))
-            
-            # Database trade record
-            db_trade = Trade(
-                user_id=user.id,
+            # Save the trade to database
+            trade_data = schemas.TradeCreate(
+                trading_account_id=account.id,
                 symbol=symbol,
                 side=side,
                 quantity=quantity,
-                price=executed_price,
+                price=float(order['price']),
                 type=order_type,
                 reduce_only=reduce_only,
-                leverage=payload.leverage,
-                timestamp=datetime.utcnow()
+                leverage=payload.leverage
             )
-            
-            # Save trade to database
-            db.add(db_trade)
-            db.commit()
-            
-            return {
-                "status": "success",
-                "order": order,
-                "trade_id": db_trade.id
-            }
-            
+            crud.create_trade(db, trade_data)
+
+            return {"status": "success", "order": order}
+
         except Exception as e:
-            db.rollback()  # Rollback in case of error
-            raise BinanceAPIError(str(e))
-            
-    except HTTPException as he:
-        raise he
+            logger.error(f"Error executing trade: {e}")
+            raise HTTPException(status_code=400, detail=str(e))
+
+    except HTTPException:
+        raise
     except Exception as e:
-        logging.error(f"Unexpected error in webhook: {e}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        logger.error(f"Unexpected error in webhook: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

@@ -1,128 +1,111 @@
 # app/schemas.py
 
-from pydantic import BaseModel
-from typing import List
+from pydantic import BaseModel, EmailStr
 from datetime import datetime
+from typing import List, Optional
+from enum import Enum
 
-# Request payload schema
-class WebhookPayload(BaseModel):
+# Enums
+class UserStatus(str, Enum):
+    ACTIVE = "active"
+    SUSPENDED = "suspended"
+    DELETED = "deleted"
+
+class AccountStatus(str, Enum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    SUSPENDED = "suspended"
+    PENDING_VERIFICATION = "pending_verification"
+    FAILED_VERIFICATION = "failed_verification"
+
+class ExchangeType(str, Enum):
+    BINANCE = "binance"
+    MEXC = "mexc"
+
+class MarketType(str, Enum):
+    SPOT = "spot"
+    FUTURES = "futures"
+
+# User Schemas
+class UserBase(BaseModel):
     username: str
-    passphrase: str
-    action: str
-    symbol: str
-    quantity: float
-    price: str
-    leverage: int = 1
+    email: Optional[EmailStr] = None
 
-# Response models
-class OrderResponseModel(BaseModel):
-    orderId: int
-    symbol: str
-    status: str
-    clientOrderId: str
-    price: str
-    avgPrice: str
-    origQty: str
-    executedQty: str
-    cumQty: str
-    cumQuote: str
-    timeInForce: str
-    type: str
-    reduceOnly: bool
-    closePosition: bool
-    side: str
-    positionSide: str
-    stopPrice: str
-    workingType: str
-    priceProtect: bool
-    origType: str
-    priceMatch: str
-    selfTradePreventionMode: str
-    goodTillDate: int
-    updateTime: int
+class UserCreate(UserBase):
+    pass
 
-class WebhookResponseModel(BaseModel):
-    status: str
-    order: OrderResponseModel
+class UserUpdate(BaseModel):
+    email: Optional[EmailStr] = None
+    status: Optional[UserStatus] = None
 
-class BalanceModel(BaseModel):
-    accountAlias: str
-    asset: str
-    balance: str
-    crossWalletBalance: str
-    crossUnPnl: str
-    availableBalance: str
-    maxWithdrawAmount: str
-    marginAvailable: bool
-    updateTime: int
-
-class BalanceResponseModel(BaseModel):
-    status: str
-    balance: BalanceModel
-
-class PositionModel(BaseModel):
-    symbol: str
-    positionSide: str
-    positionAmt: str
-    entryPrice: str
-    breakEvenPrice: str
-    markPrice: str
-    unRealizedProfit: str
-    liquidationPrice: str
-    isolatedMargin: str
-    notional: str
-    marginAsset: str
-    isolatedWallet: str
-    initialMargin: str
-    maintMargin: str
-    positionInitialMargin: str
-    openOrderInitialMargin: str
-    adl: int
-    bidNotional: str
-    askNotional: str
-    updateTime: int
-
-class PositionsResponseModel(BaseModel):
-    status: str
-    open_positions: List[PositionModel]
-
-class PositionInfoResponseModel(BaseModel):
-    status: str
-    position_info: List[PositionModel]
-
-class TradeModel(BaseModel):
+class User(UserBase):
     id: int
+    status: UserStatus
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# Trading Account Schemas
+class TradingAccountBase(BaseModel):
+    name: str
+    exchange: ExchangeType
+    market_type: MarketType
+    is_testnet: bool = True
+
+class TradingAccountCreate(TradingAccountBase):
+    api_key: str
+    api_secret: str
+
+class TradingAccountUpdate(BaseModel):
+    name: Optional[str] = None
+    api_key: Optional[str] = None
+    api_secret: Optional[str] = None
+    status: Optional[AccountStatus] = None
+    is_testnet: Optional[bool] = None
+
+class TradingAccount(TradingAccountBase):
+    id: int
+    user_id: int
+    status: AccountStatus
+    last_verified: Optional[datetime]
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# Response Models
+class UserResponse(User):
+    trading_accounts: List[TradingAccount] = []
+
+class TradingAccountResponse(TradingAccount):
+    pass
+
+# Trade Schemas
+class TradeBase(BaseModel):
     symbol: str
     side: str
-    type: str
     quantity: float
     price: float
+    type: str
+    reduce_only: bool
     leverage: int
-    reduceOnly: str
-    timeInForce: str = "GTC"
-    status: str = "FILLED"
+
+class TradeCreate(TradeBase):
+    trading_account_id: int
+
+class Trade(TradeBase):
+    id: int
     timestamp: datetime
+    trading_account_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
-class TradesResponseModel(BaseModel):
-    status: str
-    trades: List[TradeModel]
-
-class BalanceDBModel(BaseModel):
-    id: int
-    asset: str
-    balance: float
-    available_balance: float
-    timestamp: datetime
-
-    class Config:
-        orm_mode = True
-
-# Add this new model
-class PositionDBModel(BaseModel):
-    id: int
+# Position Schemas
+class PositionBase(BaseModel):
     symbol: str
     positionSide: str
     positionAmt: float
@@ -135,24 +118,78 @@ class PositionDBModel(BaseModel):
     marginAsset: str
     initialMargin: float
     maintMargin: float
-    timestamp: datetime
 
-    class Config:
-        orm_mode = True
-
-class UserCreate(BaseModel):
-    username: str
-    exchange: str
-    market_type: str
-    api_key: str
-    api_secret: str
-
-class UserResponse(BaseModel):
+class Position(PositionBase):
     id: int
-    username: str
-    exchange: str
-    market_type: str
+    trading_account_id: int
     timestamp: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
+
+# Balance Schemas
+class BalanceBase(BaseModel):
+    asset: str
+    free: float
+    locked: float
+
+class Balance(BalanceBase):
+    id: int
+    trading_account_id: int
+    timestamp: datetime
+
+    class Config:
+        from_attributes = True
+
+# Response Models for Lists
+class UserListResponse(BaseModel):
+    status: str = "success"
+    users: List[UserResponse]
+
+class TradingAccountListResponse(BaseModel):
+    status: str = "success"
+    accounts: List[TradingAccountResponse]
+
+class TradeListResponse(BaseModel):
+    status: str = "success"
+    trades: List[Trade]
+
+class PositionListResponse(BaseModel):
+    status: str = "success"
+    positions: List[Position]
+
+class BalanceListResponse(BaseModel):
+    status: str = "success"
+    balances: List[Balance]
+
+# Error Response Model
+class ErrorResponse(BaseModel):
+    status: str = "error"
+    detail: str
+
+# Webhook Schemas
+class WebhookPayload(BaseModel):
+    passphrase: str
+    account_id: int
+    action: str
+    symbol: str
+    leverage: int
+    quantity: float
+    price: str  # "market" or actual price
+
+class WebhookResponseModel(BaseModel):
+    status: str
+    order: dict
+
+# Trade Statistics Schema
+class TradeStats(BaseModel):
+    period: str
+    total_trades: int
+    total_volume: float
+    win_rate: float
+    start_date: Optional[datetime]
+    end_date: datetime
+
+class TradeStatsResponse(BaseModel):
+    status: str = "success"
+    stats: TradeStats
