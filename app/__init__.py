@@ -8,9 +8,33 @@ from .database import Base, engine
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
-    title="Trading API",
-    description="API for managing trading accounts and executing trades",
-    version="1.0.1"
+    title="Trading Bot API",
+    description="""
+    A comprehensive API for managing cryptocurrency trading accounts and automated trading operations.
+    
+    ## Features
+    * User Management
+    * Trading Account Management
+    * Automated Trading via Webhooks
+    * Position Tracking
+    * Balance Monitoring
+    * Trade History
+    
+    ## Authentication
+    All endpoints require proper authentication using API keys and secrets.
+    
+    ## Rate Limiting
+    Please note that some endpoints may have rate limiting applied.
+    """,
+    version="1.0.1",
+    contact={
+        "name": "Trading Bot Support",
+        "email": "support@tradingbot.com",
+    },
+    license_info={
+        "name": "Private License",
+        "url": "https://yourcompany.com/license",
+    }
 )
 
 # Include routers

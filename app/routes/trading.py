@@ -1,6 +1,6 @@
 # app/routes/trading.py
 
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, status, Body
 from sqlalchemy.orm import Session
 from .. import schemas, crud
 from ..database import get_db
@@ -10,10 +10,55 @@ from ..binanceClient import create_client
 from ..config import WEBHOOK_PASSPHRASE, ENVIRONMENT
 
 logger = get_logger(name="trading")
-router = APIRouter(prefix="/trading", tags=["trading"])
+router = APIRouter(
+    prefix="/trading",
+    tags=["trading"],
+    responses={
+        401: {"description": "Unauthorized"},
+        403: {"description": "Invalid webhook passphrase"},
+        500: {"description": "Internal Server Error"}
+    }
+)
 
 @router.post("/webhook", response_model=schemas.WebhookResponseModel)
-async def webhook(payload: schemas.WebhookPayload, db: Session = Depends(get_db)):
+async def webhook(
+    payload: schemas.WebhookPayload = Body(..., 
+        example={
+            "passphrase": "your_webhook_passphrase",
+            "account_id": 1,
+            "action": "open_long",
+            "symbol": "BTCUSDT",
+            "leverage": 10,
+            "quantity": 0.001,
+            "price": "market"
+        }
+    ),
+    db: Session = Depends(get_db)
+):
+    """
+    Execute a trading operation via webhook.
+
+    ## Description
+    Processes incoming webhook requests to execute trades on specified account.
+
+    ## Payload
+    * `passphrase`: Webhook security passphrase
+    * `account_id`: Trading account ID
+    * `action`: Trade action (open_long/open_short/close_long/close_short)
+    * `symbol`: Trading pair
+    * `leverage`: Position leverage
+    * `quantity`: Trade quantity
+    * `price`: "market" or limit price
+
+    ## Returns
+    Order execution details
+
+    ## Raises
+    * `403`: Invalid passphrase
+    * `404`: Account not found
+    * `400`: Invalid trade parameters
+    * `500`: Exchange API error
+    """
     try:
         if payload.passphrase != WEBHOOK_PASSPHRASE:
             raise InvalidCredentialsError()

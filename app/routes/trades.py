@@ -1,6 +1,6 @@
 # app/routes/trades.py
 
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, status, Query, Path
 from sqlalchemy.orm import Session
 from .. import schemas, crud
 from ..database import get_db
@@ -10,19 +10,44 @@ from typing import Optional
 from datetime import datetime, timedelta
 
 logger = get_logger(name="trades")
-router = APIRouter(prefix="/trades", tags=["trades"])
+router = APIRouter(
+    prefix="/trades",
+    tags=["trades"],
+    responses={
+        401: {"description": "Unauthorized - Invalid or missing credentials"},
+        403: {"description": "Forbidden - Insufficient permissions"},
+        404: {"description": "Not Found - Requested resource does not exist"},
+        500: {"description": "Internal Server Error"}
+    }
+)
 
 @router.get("/account/{account_id}", response_model=schemas.TradeListResponse)
 async def get_account_trades(
-    account_id: int,
-    skip: int = 0,
-    limit: int = 100,
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
+    account_id: int = Path(..., description="Trading account ID"),
+    skip: int = Query(0, description="Number of records to skip"),
+    limit: int = Query(100, description="Maximum number of records to return"),
+    start_date: Optional[datetime] = Query(None, description="Filter trades after this date"),
+    end_date: Optional[datetime] = Query(None, description="Filter trades before this date"),
     db: Session = Depends(get_db)
 ):
     """
-    Get trades for a specific trading account with optional date filtering
+    ## Retrieve Trades for a Specific Account
+
+    Fetches the trading history for a specified account with optional date filtering.
+
+    ### Parameters
+    - `account_id` (int): Trading account ID.
+    - `skip` (int, optional): Number of records to skip for pagination. Defaults to 0.
+    - `limit` (int, optional): Maximum number of records to return. Defaults to 100.
+    - `start_date` (datetime, optional): Filter trades occurring after this date.
+    - `end_date` (datetime, optional): Filter trades occurring before this date.
+
+    ### Returns
+    - **200 OK:** A list of trades matching the criteria.
+    
+    ### Raises
+    - **404 Not Found:** If the trading account does not exist.
+    - **500 Internal Server Error:** If there's an error fetching the trades.
     """
     try:
         # Verify account exists
@@ -55,13 +80,27 @@ async def get_account_trades(
 
 @router.get("/user/{username}", response_model=schemas.TradeListResponse)
 async def get_user_trades(
-    username: str,
-    skip: int = 0,
-    limit: int = 100,
+    username: str = Path(..., description="Username of the account owner"),
+    skip: int = Query(0, description="Number of records to skip"),
+    limit: int = Query(100, description="Maximum number of records to return"),
     db: Session = Depends(get_db)
 ):
     """
-    Get trades for all accounts belonging to a user
+    ## Get Trades for All Accounts Belonging to a User
+
+    Retrieves the trading history across all accounts associated with a specific user.
+
+    ### Parameters
+    - `username` (str): Username of the account owner.
+    - `skip` (int, optional): Number of records to skip for pagination. Defaults to 0.
+    - `limit` (int, optional): Maximum number of records to return. Defaults to 100.
+
+    ### Returns
+    - **200 OK:** A combined list of trades from all user accounts.
+    
+    ### Raises
+    - **404 Not Found:** If the user does not exist.
+    - **500 Internal Server Error:** If there's an error fetching the trades.
     """
     try:
         # Verify user exists
@@ -96,12 +135,26 @@ async def get_user_trades(
 
 @router.get("/stats/account/{account_id}", response_model=schemas.TradeStatsResponse)
 async def get_account_trade_stats(
-    account_id: int,
-    period: Optional[str] = "all",  # "day", "week", "month", "year", "all"
+    account_id: int = Path(..., description="Trading account ID"),
+    period: str = Query("all", description="Stats period (day/week/month/year/all)"),
     db: Session = Depends(get_db)
 ):
     """
-    Get trading statistics for a specific account
+    ## Get Trading Statistics for an Account
+
+    Calculates trading statistics for a specified period.
+
+    ### Parameters
+    - `account_id` (int): Trading account ID.
+    - `period` (str, optional): Time period for statistics. Options: day, week, month, year, all. Defaults to "all".
+
+    ### Returns
+    - **200 OK:** Trading statistics including total trades, total volume, win rate, and period dates.
+    
+    ### Raises
+    - **404 Not Found:** If the trading account does not exist.
+    - **400 Bad Request:** If an invalid period is specified.
+    - **500 Internal Server Error:** If there's an error calculating statistics.
     """
     try:
         # Verify account exists
@@ -122,8 +175,13 @@ async def get_account_trade_stats(
             start_date = end_date - timedelta(days=30)
         elif period == "year":
             start_date = end_date - timedelta(days=365)
-        else:  # "all"
+        elif period == "all":
             start_date = None
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid period: {period}. Choose from day, week, month, year, all."
+            )
 
         # Get trades within the period
         trades = crud.get_account_trades(db, account_id)
