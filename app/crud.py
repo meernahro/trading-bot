@@ -199,3 +199,51 @@ def save_balances(db: Session, balances_data: list, account_id: int):
     except Exception as e:
         db.rollback()
         raise DatabaseError(f"Error saving balances: {str(e)}")
+
+def update_or_create_position(
+    db: Session, 
+    position: schemas.PositionBase, 
+    account_id: int
+) -> models.Position:
+    try:
+        # Check if position exists
+        db_position = db.query(models.Position).filter(
+            models.Position.trading_account_id == account_id,
+            models.Position.symbol == position.symbol
+        ).first()
+        
+        if db_position:
+            # Update existing position
+            for key, value in position.dict().items():
+                setattr(db_position, key, value)
+            db_position.timestamp = datetime.utcnow()
+        else:
+            # Create new position
+            db_position = models.Position(
+                trading_account_id=account_id,
+                **position.dict(),
+                timestamp=datetime.utcnow()
+            )
+            db.add(db_position)
+            
+        db.commit()
+        db.refresh(db_position)
+        return db_position
+        
+    except Exception as e:
+        db.rollback()
+        raise DatabaseError(f"Error updating/creating position: {str(e)}")
+
+def get_positions(
+    db: Session, 
+    account_id: int, 
+    symbol: Optional[str] = None
+) -> List[models.Position]:
+    query = db.query(models.Position).filter(
+        models.Position.trading_account_id == account_id
+    )
+    
+    if symbol:
+        query = query.filter(models.Position.symbol == symbol)
+        
+    return query.all()
