@@ -58,3 +58,4 @@ class ExchangeClientBase(ABC):
         error_msg = f"Exchange API Error: {str(error)}"
         logger.error(error_msg)
         raise ExchangeAPIError(error_msg) 
+        # 
