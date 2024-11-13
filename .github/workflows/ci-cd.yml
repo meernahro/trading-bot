@@ -41,3 +41,7 @@ jobs:
             docker-compose down
             docker-compose build
             docker-compose up -d
+
+            # Cleanup unused Docker images and containers
+            docker image prune -af --filter "until=24h"
+            docker container prune -f
