@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .routes import binance_futures_router, accounts_router, users_router, trades_router
+from .routes import accounts_router, users_router, trades_router, binance_spot_router
 from .database import Base, engine
 from .middleware import error_handler_middleware
 from .config import ALLOWED_HOSTS
@@ -54,5 +54,5 @@ app.middleware("http")(error_handler_middleware)
 # Include routers
 app.include_router(users_router)
 app.include_router(accounts_router)
-app.include_router(binance_futures_router)
 app.include_router(trades_router)
+app.include_router(binance_spot_router)

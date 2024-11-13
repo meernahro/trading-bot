@@ -22,6 +22,9 @@ class AccountStatus(str, Enum):
 class ExchangeType(str, Enum):
     BINANCE = "binance"
     MEXC = "mexc"
+    KUCOIN = "kucoin"
+    OKX = "okx"
+    BYBIT = "bybit"
 
 class MarketType(str, Enum):
     SPOT = "spot"
@@ -30,8 +33,26 @@ class MarketType(str, Enum):
 class OrderType(str, Enum):
     MARKET = "MARKET"
     LIMIT = "LIMIT"
+    STOP_MARKET = "STOP_MARKET"
+    STOP_LIMIT = "STOP_LIMIT"
+    MARKET_STOP = "MARKET_STOP"
+    POST_ONLY = "POST_ONLY"
+    IOC = "IOC"
+    FOK = "FOK"
 
 class OrderSide(str, Enum):
+    BUY = "buy"
+    SELL = "sell"
+
+class OrderStatus(str, Enum):
+    NEW = "NEW"
+    PARTIALLY_FILLED = "PARTIALLY_FILLED"
+    FILLED = "FILLED"
+    CANCELED = "CANCELED"
+    REJECTED = "REJECTED"
+    EXPIRED = "EXPIRED"
+
+class PositionSide(str, Enum):
     LONG = "LONG"
     SHORT = "SHORT"
 
@@ -83,6 +104,7 @@ class TradingAccountBase(BaseModel):
 class TradingAccountCreate(TradingAccountBase):
     api_key: str = Field(..., min_length=10)
     api_secret: str = Field(..., min_length=10)
+    passphrase: Optional[str] = None
 
 class TradingAccountUpdate(BaseModel):
     name: Optional[str] = None
@@ -147,36 +169,7 @@ class Position(PositionBase):
     class Config:
         from_attributes = True
 
-# Binance Futures Schemas
-class OpenPositionRequest(BaseModel):
-    symbol: str
-    side: OrderSide
-    type: OrderType
-    quantity: float
-    price: Optional[float] = None  # Required for LIMIT orders
-    leverage: int = Field(..., ge=1, le=125)
 
-class ClosePositionRequest(BaseModel):
-    symbol: str
-    side: OrderSide
-    type: OrderType
-    quantity: float
-    price: Optional[float] = None
-
-class OrderResponse(BaseModel):
-    status: str
-    order: Dict
-
-class PositionsResponse(BaseModel):
-    status: str
-    positions: List[Dict[str, Any]]
-
-    class Config:
-        arbitrary_types_allowed = True
-
-class FuturesAccountResponse(BaseModel):
-    status: str
-    account: Dict
 
 # Response Models for Lists
 class UserResponse(User):
@@ -224,3 +217,104 @@ class LeverageResponse(BaseModel):
 
 class PriceResponse(BaseModel):
     price: str
+
+# Base Order Schema
+class OrderBase(BaseModel):
+    symbol: str
+    side: OrderSide
+    type: OrderType
+    quantity: float
+    price: Optional[float] = None
+    stop_price: Optional[float] = None
+    time_in_force: Optional[str] = "GTC"
+    
+# Order Request Schemas
+class CreateOrderRequest(OrderBase):
+    leverage: Optional[int] = Field(None, ge=1, le=125)
+
+class OrderResponse(BaseModel):
+    exchange: ExchangeType
+    market_type: MarketType
+    order_id: str
+    status: OrderStatus
+    symbol: str
+    side: OrderSide
+    type: OrderType
+    quantity: float
+    price: float
+    executed_qty: float
+    executed_price: Optional[float]
+    commission: Optional[float]
+    commission_asset: Optional[str]
+    created_at: datetime
+
+# Add these new schemas to the existing ones
+
+class OrderBookEntry(BaseModel):
+    price: float
+    quantity: float
+
+class OrderBook(BaseModel):
+    symbol: str
+    bids: List[List[float]]
+    asks: List[List[float]]
+    timestamp: int
+
+class Trade(BaseModel):
+    id: int
+    price: float
+    quantity: float
+    timestamp: int
+    maker: bool
+    best_match: bool
+
+class Kline(BaseModel):
+    timestamp: int
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float
+    close_time: int
+    quote_volume: float
+    trades: int
+    taker_buy_base: float
+    taker_buy_quote: float
+
+class Ticker24h(BaseModel):
+    symbol: str
+    price_change: float
+    price_change_percent: float
+    weighted_avg_price: float
+    prev_close_price: float
+    last_price: float
+    last_qty: float
+    bid_price: float
+    ask_price: float
+    open_price: float
+    high_price: float
+    low_price: float
+    volume: float
+    quote_volume: float
+    open_time: int
+    close_time: int
+    count: int
+
+class SymbolInfo(BaseModel):
+    symbol: str
+    status: str
+    base_asset: str
+    quote_asset: str
+    min_price: float
+    max_price: float
+    tick_size: float
+    min_qty: float
+    max_qty: float
+    step_size: float
+    min_notional: float
+
+class ExchangeInfo(BaseModel):
+    timezone: str
+    server_time: int
+    rate_limits: List[Dict]
+    symbols: List[SymbolInfo]

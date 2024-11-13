@@ -44,3 +44,18 @@ class ResourceNotFoundError(BaseCustomException):
             status_code=404, 
             detail=f"{resource_type} not found: {resource_id}"
         ) 
+
+class ExchangeAPIError(BaseCustomException):
+    """Base exception for exchange API errors"""
+    def __init__(self, detail: str):
+        super().__init__(status_code=502, detail=f"Exchange API error: {detail}")
+
+class ExchangeConnectionError(BaseCustomException):
+    """Exception for exchange connection errors"""
+    def __init__(self, detail: str):
+        super().__init__(status_code=503, detail=f"Exchange connection error: {detail}")
+
+class OrderValidationError(BaseCustomException):
+    """Exception for order validation errors"""
+    def __init__(self, detail: str):
+        super().__init__(status_code=400, detail=f"Order validation error: {detail}")
