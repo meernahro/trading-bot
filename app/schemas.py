@@ -328,21 +328,21 @@ class BinanceOrderType(str, Enum):
     LIMIT = "LIMIT"
 
 class BinanceTimeInForce(str, Enum):
-    GTC = "GTC"  # Good Till Cancel
-    IOC = "IOC"  # Immediate or Cancel
-    FOK = "FOK"  # Fill or Kill
+    GTC = "GTC"
+    IOC = "IOC"
+    FOK = "FOK"
 
 # For market orders where you want to spend/sell a specific amount
 class BinanceSpotMarketOrder(BaseModel):
-    symbol: str = Field(..., description="Trading pair symbol (e.g., 'BTCUSDT')")
+    symbol: str = Field(..., description="Trading pair (e.g., BTCUSDT)")
     side: BinanceOrderSide
     quantity: Optional[float] = Field(
         None, 
-        description="Base asset quantity (e.g., BTC amount). Required for SELL orders."
+        description="Crypto amount (for SELL orders)"
     )
     quoteOrderQty: Optional[float] = Field(
         None, 
-        description="Quote asset quantity (e.g., USDT amount). Only for BUY orders."
+        description="USDT amount (for BUY orders)"
     )
 
     @validator('quoteOrderQty', 'quantity')
@@ -372,13 +372,13 @@ class BinanceSpotMarketOrder(BaseModel):
 
 # For limit orders
 class BinanceSpotLimitOrder(BaseModel):
-    symbol: str = Field(..., description="Trading pair symbol (e.g., 'BTCUSDT')")
+    symbol: str = Field(..., description="Trading pair (e.g., BTCUSDT)")
     side: BinanceOrderSide
-    quantity: float = Field(..., description="Base asset quantity")
-    price: float = Field(..., description="Limit order price")
+    quantity: float = Field(..., description="Amount of crypto to buy/sell")
+    price: float = Field(..., description="Price per unit")
     timeInForce: BinanceTimeInForce = Field(
         default=BinanceTimeInForce.GTC,
-        description="Time in force for limit order"
+        description="Time in force"
     )
 
     class Config:
@@ -394,53 +394,25 @@ class BinanceSpotLimitOrder(BaseModel):
 
 # Combined schema that will be used by the API endpoint
 class BinanceSpotOrderRequest(BaseModel):
-    type: BinanceOrderType = Field(..., description="Order type (MARKET or LIMIT)")
+    type: BinanceOrderType
     market_order: Optional[BinanceSpotMarketOrder] = Field(
         None, 
-        description="Market order details. Required if type is MARKET."
+        description="Market order details"
     )
     limit_order: Optional[BinanceSpotLimitOrder] = Field(
         None,
-        description="Limit order details. Required if type is LIMIT."
+        description="Limit order details"
     )
 
-    @validator('market_order', 'limit_order')
-    def validate_order_data(cls, v, values):
-        if 'type' in values:
-            if values['type'] == BinanceOrderType.MARKET and not isinstance(v, BinanceSpotMarketOrder):
-                raise ValueError("Market order details required for market order type")
-            elif values['type'] == BinanceOrderType.LIMIT and not isinstance(v, BinanceSpotLimitOrder):
-                raise ValueError("Limit order details required for limit order type")
-        return v
-
-    class Config:
-        schema_extra = {
-            "examples": {
-                "market_buy": {
-                    "type": "MARKET",
-                    "market_order": {
-                        "symbol": "BTCUSDT",
-                        "side": "BUY",
-                        "quoteOrderQty": 100  # Spend 100 USDT
-                    }
-                },
-                "market_sell": {
-                    "type": "MARKET",
-                    "market_order": {
-                        "symbol": "BTCUSDT",
-                        "side": "SELL",
-                        "quantity": 0.001  # Sell 0.001 BTC
-                    }
-                },
-                "limit_buy": {
-                    "type": "LIMIT",
-                    "limit_order": {
-                        "symbol": "BTCUSDT",
-                        "side": "BUY",
-                        "quantity": 0.001,
-                        "price": 27000.0,
-                        "timeInForce": "GTC"
-                    }
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "type": "MARKET",
+                "market_order": {
+                    "symbol": "BTCUSDT",
+                    "side": "BUY",
+                    "quoteOrderQty": 20
                 }
             }
         }
+    }
