@@ -180,73 +180,7 @@ async def create_order(
     except ExchangeAPIError as e:
         raise HTTPException(status_code=502, detail=str(e))
 
-@router.get("/orderbook/{symbol}")
-async def get_order_book(
-    symbol: str = Path(..., description="Trading symbol"),
-    limit: int = Query(100, le=1000, description="Number of orders to return"),
-    account_id: int = Query(..., description="Trading account ID"),
-    db: Session = Depends(get_db)
-):
-    """Get order book for a symbol"""
-    client = get_binance_spot_client(account_id, db)
-    try:
-        return client.get_order_book(symbol=symbol, limit=limit)
-    except ExchangeAPIError as e:
-        raise HTTPException(status_code=502, detail=str(e))
 
-@router.get("/trades/{symbol}")
-async def get_recent_trades(
-    symbol: str = Path(..., description="Trading symbol"),
-    limit: int = Query(50, le=1000, description="Number of trades to return"),
-    account_id: int = Query(..., description="Trading account ID"),
-    db: Session = Depends(get_db)
-):
-    """Get recent trades for a symbol"""
-    client = get_binance_spot_client(account_id, db)
-    try:
-        return client.get_recent_trades(symbol=symbol, limit=limit)
-    except ExchangeAPIError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-
-@router.get("/klines/{symbol}")
-async def get_klines(
-    symbol: str = Path(..., description="Trading symbol"),
-    interval: str = Query(..., description="Kline interval (1m, 5m, 15m, 1h, etc.)"),
-    limit: int = Query(500, le=1000, description="Number of klines to return"),
-    account_id: int = Query(..., description="Trading account ID"),
-    db: Session = Depends(get_db)
-):
-    """Get klines/candlestick data"""
-    client = get_binance_spot_client(account_id, db)
-    try:
-        return client.get_klines(symbol=symbol, interval=interval, limit=limit)
-    except ExchangeAPIError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-
-@router.get("/ticker/{symbol}")
-async def get_24h_ticker(
-    symbol: str = Path(..., description="Trading symbol"),
-    account_id: int = Query(..., description="Trading account ID"),
-    db: Session = Depends(get_db)
-):
-    """Get 24-hour ticker statistics"""
-    client = get_binance_spot_client(account_id, db)
-    try:
-        return client.get_24h_ticker(symbol=symbol)
-    except ExchangeAPIError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-
-@router.get("/exchange-info")
-async def get_exchange_info(
-    account_id: int = Query(..., description="Trading account ID"),
-    db: Session = Depends(get_db)
-):
-    """Get exchange trading rules and symbol information"""
-    client = get_binance_spot_client(account_id, db)
-    try:
-        return client.get_exchange_info()
-    except ExchangeAPIError as e:
-        raise HTTPException(status_code=502, detail=str(e))
 
 @router.get("/orders/{symbol}")
 async def get_symbol_orders(

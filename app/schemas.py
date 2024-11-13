@@ -300,24 +300,6 @@ class Ticker24h(BaseModel):
     close_time: int
     count: int
 
-class SymbolInfo(BaseModel):
-    symbol: str
-    status: str
-    base_asset: str
-    quote_asset: str
-    min_price: float
-    max_price: float
-    tick_size: float
-    min_qty: float
-    max_qty: float
-    step_size: float
-    min_notional: float
-
-class ExchangeInfo(BaseModel):
-    timezone: str
-    server_time: int
-    rate_limits: List[Dict]
-    symbols: List[SymbolInfo]
 
 class BinanceOrderSide(str, Enum):
     BUY = "BUY"
