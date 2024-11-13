@@ -19,8 +19,19 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            cd /path/to/deployment
+            # Go to home directory
+            cd ~
+
+            # Clone repository if it doesn't exist, otherwise pull latest changes
+            if [ ! -d trading-bot ]; then
+              git clone ${{ github.server_url }}/${{ github.repository }}.git trading-bot
+            fi
+
+            # Enter project directory and update
+            cd trading-bot
             git pull origin main
-            docker-compose down --volumes
+
+            # Build and start the containers
+            docker-compose down
             docker-compose build
             docker-compose up -d
