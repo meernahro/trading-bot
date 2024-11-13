@@ -31,6 +31,12 @@ jobs:
             cd trading-bot
             git pull origin main
 
+            # Create .env file from secret
+            echo "${{ secrets.ENV_FILE }}" > .env
+
+            # Create data directory if it doesn't exist
+            mkdir -p data
+
             # Build and start the containers
             docker-compose down
             docker-compose build
