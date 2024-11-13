@@ -4,6 +4,9 @@ from binance.exceptions import BinanceAPIException
 from .base import ExchangeClientBase
 from ..utils.exceptions import ExchangeAPIError
 from ..utils.customLogger import get_logger
+import traceback
+from datetime import datetime
+from ..schemas import ExchangeType, MarketType
 
 logger = get_logger(__name__)
 
@@ -76,8 +79,10 @@ class BinanceSpotClient(ExchangeClientBase):
         symbol: str,
         side: str,
         order_type: str,
-        quantity: float,
-        price: Optional[float] = None
+        quantity: Optional[float] = None,
+        price: Optional[float] = None,
+        quote_order_qty: Optional[float] = None,
+        time_in_force: Optional[str] = None
     ) -> Dict:
         """Create a new order"""
         try:
@@ -85,21 +90,36 @@ class BinanceSpotClient(ExchangeClientBase):
                 'symbol': symbol,
                 'side': side.upper(),
                 'type': order_type.upper(),
-                'quantity': quantity
             }
             
-            if order_type.upper() == 'LIMIT':
-                if not price:
-                    raise ValueError("Price is required for LIMIT orders")
+            # For market orders
+            if order_type.upper() == 'MARKET':
+                if quote_order_qty and side.upper() == 'BUY':
+                    params['quoteOrderQty'] = quote_order_qty
+                elif quantity:
+                    params['quantity'] = quantity
+                else:
+                    raise ValueError("Either quantity or quote_order_qty must be provided")
+            
+            # For limit orders
+            elif order_type.upper() == 'LIMIT':
+                if not all([quantity, price]):
+                    raise ValueError("Both quantity and price are required for limit orders")
+                params['quantity'] = quantity
                 params['price'] = price
-                params['timeInForce'] = 'GTC'
+                params['timeInForce'] = time_in_force or 'GTC'
 
+            logger.info(f"Sending order to Binance with params: {params}")
             order = self.client.create_order(**params)
+            logger.info(f"Received response from Binance: {order}")
+            
             return self._format_order(order)
+            
         except BinanceAPIException as e:
             self.handle_error(e)
         except Exception as e:
             logger.error(f"Error creating order: {str(e)}")
+            logger.error(f"Full error: {traceback.format_exc()}")
             raise ExchangeAPIError(f"Failed to create order: {str(e)}")
 
     def cancel_order(self, symbol: str, order_id: str) -> Dict:
@@ -272,18 +292,35 @@ class BinanceSpotClient(ExchangeClientBase):
 
     def _format_order(self, order: Dict) -> Dict:
         """Format order response to standardized format"""
+        # Calculate executed price from fills if available
+        executed_price = None
+        if order.get('fills'):
+            total_cost = sum(float(fill['price']) * float(fill['qty']) for fill in order['fills'])
+            total_qty = sum(float(fill['qty']) for fill in order['fills'])
+            executed_price = total_cost / total_qty if total_qty > 0 else None
+
+        # Get commission from fills
+        commission = 0
+        commission_asset = None
+        if order.get('fills'):
+            commission = sum(float(fill.get('commission', 0)) for fill in order['fills'])
+            commission_asset = order['fills'][0].get('commissionAsset') if order['fills'] else None
+
         return {
+            'exchange': ExchangeType.BINANCE,  # Add exchange type
+            'market_type': MarketType.SPOT,    # Add market type
             'order_id': str(order['orderId']),
             'symbol': order['symbol'],
             'status': order['status'],
-            'side': order['side'],
+            'side': order['side'].lower(),     # Convert to lowercase to match enum
             'type': order['type'],
             'quantity': float(order['origQty']),
             'executed_qty': float(order['executedQty']),
             'price': float(order['price']) if order['price'] != '0' else None,
-            'created_at': order['time'],
-            'updated_at': order.get('updateTime'),
-            'commission': float(order.get('commission', 0)),
-            'commission_asset': order.get('commissionAsset'),
+            'executed_price': executed_price,   # Add executed price
+            'created_at': datetime.fromtimestamp(order['transactTime'] / 1000) if order.get('transactTime') else None,
+            'updated_at': datetime.fromtimestamp(order['workingTime'] / 1000) if order.get('workingTime') else None,
+            'commission': commission,
+            'commission_asset': commission_asset,
             'average_price': float(order.get('avgPrice', 0)) or None
         } 

@@ -71,27 +71,44 @@ async def get_asset_balance(
 
 @router.post("/order", response_model=schemas.OrderResponse)
 async def create_order(
-    order: schemas.CreateOrderRequest,
+    order: schemas.BinanceSpotOrderRequest,
     account_id: int = Query(..., description="Trading account ID"),
     db: Session = Depends(get_db)
 ):
     """Create a new order"""
     client = get_binance_spot_client(account_id, db)
     try:
-        response = client.create_order(
-            symbol=order.symbol,
-            side=order.side.value,
-            order_type=order.type.value,
-            quantity=order.quantity,
-            price=order.price
-        )
+        if order.type == schemas.BinanceOrderType.MARKET:
+            params = {
+                'symbol': order.market_order.symbol,
+                'side': order.market_order.side.value,
+                'order_type': order.type.value
+            }
+            
+            # Handle market orders with either quantity or quote_order_qty
+            if order.market_order.quoteOrderQty is not None:
+                params['quote_order_qty'] = order.market_order.quoteOrderQty
+            else:
+                params['quantity'] = order.market_order.quantity
+                
+        else:  # LIMIT order
+            params = {
+                'symbol': order.limit_order.symbol,
+                'side': order.limit_order.side.value,
+                'order_type': order.type.value,
+                'quantity': order.limit_order.quantity,
+                'price': order.limit_order.price,
+                'time_in_force': order.limit_order.timeInForce.value
+            }
+
+        response = client.create_order(**params)
         
         # Save order to database
         trade_data = schemas.TradeCreate(
             trading_account_id=account_id,
-            symbol=order.symbol,
-            side=order.side,
-            quantity=order.quantity,
+            symbol=order.market_order.symbol if order.type == schemas.BinanceOrderType.MARKET else order.limit_order.symbol,
+            side=order.market_order.side if order.type == schemas.BinanceOrderType.MARKET else order.limit_order.side,
+            quantity=float(response['executed_qty']),
             price=float(response['price']) if response['price'] else 0,
             type=order.type,
             order_id=response['order_id']
