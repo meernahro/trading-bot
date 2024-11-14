@@ -398,3 +398,31 @@ class BinanceSpotOrderRequest(BaseModel):
             }
         }
     }
+
+class MEXCOrderSide(str, Enum):
+    BUY = "BUY"
+    SELL = "SELL"
+
+class MEXCOrderType(str, Enum):
+    LIMIT = "LIMIT"
+    MARKET = "MARKET"
+
+class MEXCOrderCreate(BaseModel):
+    symbol: str
+    side: MEXCOrderSide
+    type: MEXCOrderType
+    quantity: float
+    price: Optional[float] = None  # Optional for MARKET orders
+
+class MEXCOrderTest(BaseModel):
+    """Schema for testing MEXC orders without actually placing them"""
+    symbol: str
+    side: MEXCOrderSide
+    type: MEXCOrderType
+    quantity: float
+    price: Optional[float] = None
+    # Additional MEXC-specific optional parameters
+    time_in_force: Optional[str] = None  # GTC, IOC, FOK
+    quote_order_qty: Optional[float] = None
+    stop_price: Optional[float] = None
+    iceberg_qty: Optional[float] = None

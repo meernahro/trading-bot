@@ -11,6 +11,6 @@ python-jose[cryptography]
 passlib[bcrypt]
 email-validator 
 kucoin-python
-mexc-api
+jsii
 python-okx
 pybit

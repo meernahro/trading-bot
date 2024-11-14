@@ -43,74 +43,163 @@ def get_mexc_spot_client(account_id: int, db: Session):
             detail=f"Failed to initialize exchange client: {str(e)}"
         )
 
-@router.get("/account")
-async def get_account_info(
-    account_id: int = Query(..., description="Trading account ID"),
+@router.get("/{account_id}/account")
+def get_account(
+    account_id: int,
     db: Session = Depends(get_db)
 ):
-    """Get account information"""
+    """Get MEXC account information"""
     client = get_mexc_spot_client(account_id, db)
     try:
         return client.get_account()
     except ExchangeAPIError as e:
         raise HTTPException(status_code=502, detail=str(e))
 
-@router.get("/balance/{asset}")
-async def get_asset_balance(
-    asset: str,
-    account_id: int = Query(..., description="Trading account ID"),
+@router.get("/{account_id}/balance")
+def get_balance(
+    account_id: int,
+    asset: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    """Get balance for specific asset"""
+    """Get account balance"""
     client = get_mexc_spot_client(account_id, db)
     try:
         return client.get_balance(asset)
     except ExchangeAPIError as e:
         raise HTTPException(status_code=502, detail=str(e))
 
-@router.post("/order", response_model=schemas.OrderResponse)
-async def create_order(
-    order: schemas.CreateOrderRequest,
-    account_id: int = Query(..., description="Trading account ID"),
+@router.get("/{account_id}/price/{symbol}")
+def get_symbol_price(
+    account_id: int,
+    symbol: str,
+    db: Session = Depends(get_db)
+):
+    """Get current price for a symbol"""
+    client = get_mexc_spot_client(account_id, db)
+    try:
+        return client.get_symbol_price(symbol)
+    except ExchangeAPIError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+@router.post("/{account_id}/order")
+def create_order(
+    account_id: int,
+    order: schemas.MEXCOrderCreate,
     db: Session = Depends(get_db)
 ):
     """Create a new order"""
     client = get_mexc_spot_client(account_id, db)
     try:
-        response = client.create_order(
+        return client.create_order(
             symbol=order.symbol,
-            side=order.side.value,
-            order_type=order.type.value,
+            side=order.side,
+            order_type=order.type,
             quantity=order.quantity,
             price=order.price
         )
-        
-        # Save order to database
-        trade_data = schemas.TradeCreate(
-            trading_account_id=account_id,
-            symbol=order.symbol,
-            side=order.side,
-            quantity=order.quantity,
-            price=float(response['price']) if response['price'] else 0,
-            type=order.type,
-            order_id=response['order_id']
-        )
-        crud.create_trade(db, trade_data)
-        
-        return response
     except ExchangeAPIError as e:
         raise HTTPException(status_code=502, detail=str(e))
 
-@router.get("/orderbook/{symbol}")
-async def get_order_book(
-    symbol: str = Path(..., description="Trading symbol"),
-    limit: int = Query(100, le=1000, description="Number of orders to return"),
-    account_id: int = Query(..., description="Trading account ID"),
+@router.delete("/{account_id}/order/{symbol}/{order_id}")
+def cancel_order(
+    account_id: int,
+    symbol: str,
+    order_id: str,
+    db: Session = Depends(get_db)
+):
+    """Cancel an existing order"""
+    client = get_mexc_spot_client(account_id, db)
+    try:
+        return client.cancel_order(symbol=symbol, order_id=order_id)
+    except ExchangeAPIError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+@router.get("/{account_id}/order/{symbol}/{order_id}")
+def get_order(
+    account_id: int,
+    symbol: str,
+    order_id: str,
+    db: Session = Depends(get_db)
+):
+    """Get order details"""
+    client = get_mexc_spot_client(account_id, db)
+    try:
+        return client.get_order(symbol=symbol, order_id=order_id)
+    except ExchangeAPIError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+@router.get("/{account_id}/open-orders")
+def get_open_orders(
+    account_id: int,
+    symbol: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """Get all open orders"""
+    client = get_mexc_spot_client(account_id, db)
+    try:
+        return client.get_open_orders(symbol)
+    except ExchangeAPIError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+@router.get("/{account_id}/orderbook/{symbol}")
+def get_order_book(
+    account_id: int,
+    symbol: str,
+    limit: int = Query(100, le=1000),
     db: Session = Depends(get_db)
 ):
     """Get order book for a symbol"""
     client = get_mexc_spot_client(account_id, db)
     try:
-        return client.get_order_book(symbol=symbol, limit=limit)
+        return client.get_order_book(symbol, limit)
+    except ExchangeAPIError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+@router.post("/{account_id}/order/test")
+def test_order(
+    account_id: int,
+    order: schemas.MEXCOrderTest,
+    db: Session = Depends(get_db)
+):
+    """Test new order parameters without creating an actual order"""
+    client = get_mexc_spot_client(account_id, db)
+    try:
+        # Extract optional parameters
+        kwargs = {
+            'time_in_force': order.time_in_force,
+            'quote_order_qty': order.quote_order_qty,
+            'stop_price': order.stop_price,
+            'iceberg_qty': order.iceberg_qty
+        }
+        # Remove None values
+        kwargs = {k: v for k, v in kwargs.items() if v is not None}
+        
+        return client.test_order(
+            symbol=order.symbol,
+            side=order.side,
+            order_type=order.type,
+            quantity=order.quantity,
+            price=order.price,
+            **kwargs
+        )
+    except ExchangeAPIError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+@router.get("/{account_id}/orders")
+def get_order_history(
+    account_id: int,
+    symbol: Optional[str] = None,
+    limit: int = Query(500, le=1000),
+    from_id: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """Get historical orders"""
+    client = get_mexc_spot_client(account_id, db)
+    try:
+        return client.get_order_history(
+            symbol=symbol,
+            limit=limit,
+            from_id=from_id
+        )
     except ExchangeAPIError as e:
         raise HTTPException(status_code=502, detail=str(e)) 

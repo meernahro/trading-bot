@@ -1,7 +1,10 @@
 # Dockerfile
 
 # Use Python 3.11
-FROM python:3.11-slim
+# FROM python:3.11-slim
+
+FROM nikolaik/python-nodejs:python3.11-nodejs23-slim
+
 
 # Set the working directory in the container.
 WORKDIR /app
