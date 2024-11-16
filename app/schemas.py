@@ -415,20 +415,26 @@ class MEXCOrderCreate(BaseModel):
     price: Optional[float] = None
     quote_order_qty: Optional[float] = None  # Amount in USDT to spend
 
-    @validator('quote_order_qty', 'quantity')
-    def validate_quantities(cls, v, values):
-        if 'quote_order_qty' in values and 'quantity' in values:
-            if values['quote_order_qty'] is not None and values['quantity'] is not None:
-                raise ValueError("Cannot specify both quantity and quote_order_qty")
-        if values.get('type') == MEXCOrderType.MARKET:
-            if values.get('quote_order_qty') is None and values.get('quantity') is None:
-                raise ValueError("Must specify either quantity or quote_order_qty for market orders")
-        return v
-
     @validator('quote_order_qty')
     def validate_quote_order_qty(cls, v, values):
-        if v is not None and values.get('side') == MEXCOrderSide.SELL:
-            raise ValueError("quote_order_qty can only be used with BUY orders")
+        if v is not None:
+            if values.get('side') != MEXCOrderSide.BUY:
+                raise ValueError("quote_order_qty can only be used with BUY orders")
+            if values.get('type') != MEXCOrderType.MARKET:
+                raise ValueError("quote_order_qty can only be used with MARKET orders")
+        return v
+
+    @validator('quantity', 'price')
+    def validate_order_params(cls, v, values):
+        order_type = values.get('type')
+        if order_type == MEXCOrderType.LIMIT:
+            if not values.get('quantity'):
+                raise ValueError("quantity is required for LIMIT orders")
+            if not values.get('price'):
+                raise ValueError("price is required for LIMIT orders")
+        elif order_type == MEXCOrderType.MARKET:
+            if values.get('quote_order_qty') is None and values.get('quantity') is None:
+                raise ValueError("Either quantity or quote_order_qty must be provided for MARKET orders")
         return v
 
 class MEXCOrderTest(BaseModel):
