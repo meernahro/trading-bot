@@ -74,20 +74,39 @@ class MEXCSpotClient(ExchangeClientBase):
         symbol: str,
         side: str,
         order_type: str,
-        quantity: float,
+        quantity: Optional[float] = None,
         price: Optional[float] = None,
+        quote_order_qty: Optional[float] = None,
         **kwargs
     ) -> Dict:
-        """Create a new order"""
+        """Create a new order
+        
+        Args:
+            symbol: Trading pair
+            side: BUY or SELL
+            order_type: LIMIT or MARKET
+            quantity: Amount of base asset to trade
+            price: Price for limit orders
+            quote_order_qty: Amount of quote asset (USDT) to spend (only for BUY orders)
+        """
         try:
             # Build options dictionary
-            options = {
-                'quantity': quantity
-            }
+            options = {}
             
-            if order_type.upper() == 'LIMIT':
+            if order_type.upper() == 'MARKET':
+                if quote_order_qty and side.upper() == 'BUY':
+                    options['quoteOrderQty'] = quote_order_qty
+                elif quantity:
+                    options['quantity'] = quantity
+                else:
+                    raise ValueError("Either quantity or quote_order_qty must be provided for market orders")
+                
+            elif order_type.upper() == 'LIMIT':
                 if not price:
                     raise ValueError("Price is required for LIMIT orders")
+                if not quantity:
+                    raise ValueError("Quantity is required for LIMIT orders")
+                options['quantity'] = quantity
                 options['price'] = price
                 options['timeInForce'] = kwargs.get('time_in_force', 'GTC')
 
@@ -99,7 +118,6 @@ class MEXCSpotClient(ExchangeClientBase):
             logger.info(f"Creating MEXC order: symbol={symbol}, side={side}, type={order_type}")
             logger.debug(f"Order options: {options}")
 
-            # Use the order endpoint with options parameter
             order = self.client.new_order(
                 symbol=symbol,
                 side=side.upper(),

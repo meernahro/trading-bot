@@ -411,8 +411,25 @@ class MEXCOrderCreate(BaseModel):
     symbol: str
     side: MEXCOrderSide
     type: MEXCOrderType
-    quantity: float
-    price: Optional[float] = None  # Optional for MARKET orders
+    quantity: Optional[float] = None
+    price: Optional[float] = None
+    quote_order_qty: Optional[float] = None  # Amount in USDT to spend
+
+    @validator('quote_order_qty', 'quantity')
+    def validate_quantities(cls, v, values):
+        if 'quote_order_qty' in values and 'quantity' in values:
+            if values['quote_order_qty'] is not None and values['quantity'] is not None:
+                raise ValueError("Cannot specify both quantity and quote_order_qty")
+        if values.get('type') == MEXCOrderType.MARKET:
+            if values.get('quote_order_qty') is None and values.get('quantity') is None:
+                raise ValueError("Must specify either quantity or quote_order_qty for market orders")
+        return v
+
+    @validator('quote_order_qty')
+    def validate_quote_order_qty(cls, v, values):
+        if v is not None and values.get('side') == MEXCOrderSide.SELL:
+            raise ValueError("quote_order_qty can only be used with BUY orders")
+        return v
 
 class MEXCOrderTest(BaseModel):
     """Schema for testing MEXC orders without actually placing them"""

@@ -87,7 +87,12 @@ def create_order(
     order: schemas.MEXCOrderCreate,
     db: Session = Depends(get_db)
 ):
-    """Create a new order"""
+    """Create a new order
+    
+    You can create orders in two ways:
+    1. Specify quantity: Amount of base asset to trade
+    2. Specify quote_order_qty: Amount of USDT to spend (only for BUY orders)
+    """
     client = get_mexc_spot_client(account_id, db)
     try:
         return client.create_order(
@@ -95,7 +100,8 @@ def create_order(
             side=order.side,
             order_type=order.type,
             quantity=order.quantity,
-            price=order.price
+            price=order.price,
+            quote_order_qty=order.quote_order_qty
         )
     except ExchangeAPIError as e:
         raise HTTPException(status_code=502, detail=str(e))
