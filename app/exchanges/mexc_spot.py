@@ -3,6 +3,7 @@ from mexc_sdk import Spot
 from .base import ExchangeClientBase
 from ..utils.exceptions import ExchangeAPIError
 from ..utils.customLogger import get_logger
+from fastapi import HTTPException
 
 logger = get_logger(__name__)
 
@@ -89,29 +90,32 @@ class MEXCSpotClient(ExchangeClientBase):
             price: Price for limit orders
             quote_order_qty: Amount of quote asset (USDT) to spend (only for BUY orders)
         """
-        try:
-            # Build options dictionary
-            options = {}
-            
-            if order_type.upper() == 'MARKET':
-                if quote_order_qty and side.upper() == 'BUY':
-                    options['quoteOrderQty'] = quote_order_qty
-                if quantity:
-                    options['quantity'] = quantity
-                
-            elif order_type.upper() == 'LIMIT':
+        # Build options dictionary
+        options = {}
+        
+        if order_type.upper() == 'MARKET':
+            if quote_order_qty and side.upper() == 'BUY':
+                options['quoteOrderQty'] = quote_order_qty
+            if quantity:
                 options['quantity'] = quantity
-                options['price'] = price
-                options['timeInForce'] = kwargs.get('time_in_force', 'GTC')
+            
+        elif order_type.upper() == 'LIMIT':
+            options['quantity'] = quantity
+            options['price'] = price
+            options['timeInForce'] = kwargs.get('time_in_force', 'GTC')
 
-            # Add any additional parameters from kwargs
-            for key, value in kwargs.items():
-                if value is not None:
-                    options[key] = value
+        # Add any additional parameters from kwargs
+        for key, value in kwargs.items():
+            if value is not None:
+                options[key] = value
 
-            logger.info(f"Creating MEXC order: symbol={symbol}, side={side}, type={order_type}")
-            logger.debug(f"Order options: {options}")
+        logger.info(f"Creating MEXC order: symbol={symbol}, side={side}, type={order_type}")
+        logger.debug(f"Order options: {options}")
 
+        try:
+            # Always request FULL response type
+            options['newOrderRespType'] = 'FULL'
+            
             order = self.client.new_order(
                 symbol=symbol,
                 side=side.upper(),
@@ -122,13 +126,44 @@ class MEXCSpotClient(ExchangeClientBase):
             logger.info(f"MEXC order created successfully: {order.get('orderId', 'N/A')}")
             logger.debug(f"Full order response: {order}")
             
-            formatted_order = self._format_order(order)
-            logger.debug(f"Formatted order: {formatted_order}")
+            try:
+                formatted_order = self._format_order(order)
+                logger.debug(f"Formatted order: {formatted_order}")
+                return formatted_order
+            except KeyError as e:
+                logger.error(f"Failed to format order response: {str(e)}")
+                # Return the raw order response if formatting fails
+                return order
             
-            return formatted_order
         except Exception as e:
-            logger.error(f"Error creating order: {str(e)}")
-            raise ExchangeAPIError(f"Failed to create order: {str(e)}")
+            error_msg = str(e)
+            logger.error(f"Error creating order: {error_msg}")
+            
+            # Look for JSON in the error message
+            try:
+                import json
+                # Try to find JSON after the status code line
+                if "status code 400:" in error_msg:
+                    json_str = error_msg.split("status code 400:", 1)[1].strip()
+                    mexc_error = json.loads(json_str)
+                # Or try the original method
+                elif '{"code":' in error_msg:
+                    json_str = error_msg[error_msg.find('{'):error_msg.rfind('}')+1]
+                    mexc_error = json.loads(json_str)
+                else:
+                    raise ValueError("No JSON found in error message")
+                
+                raise HTTPException(
+                    status_code=400,
+                    detail=mexc_error
+                )
+                
+            except (json.JSONDecodeError, ValueError):
+                # If we can't parse the JSON, return the original error
+                raise HTTPException(
+                    status_code=400,
+                    detail={"message": error_msg}
+                )
 
     def cancel_order(self, symbol: str, order_id: str) -> Dict:
         """Cancel an existing order"""
@@ -179,15 +214,15 @@ class MEXCSpotClient(ExchangeClientBase):
         return {
             'order_id': str(order['orderId']),
             'symbol': order['symbol'],
-            'status': order['status'],
+            'status': order.get('status', 'FILLED'),
             'side': order['side'],
             'type': order['type'],
             'price': float(order['price']),
             'quantity': float(order['origQty']),
-            'executed_qty': float(order['executedQty']),
+            'executed_qty': float(order.get('executedQty', order['origQty'])),
             'cummulative_quote_qty': float(order.get('cummulativeQuoteQty', 0)),
-            'time': order['time'],
-            'update_time': order.get('updateTime', order['time'])
+            'time': order.get('transactTime', order.get('time', 0)),
+            'update_time': order.get('updateTime', order.get('transactTime', order.get('time', 0)))
         }
 
     def get_server_time(self) -> Dict:

@@ -41,7 +41,7 @@ def get_mexc_spot_client(account_id: int, db: Session):
     except Exception as e:
         logger.error(f"Failed to create MEXC spot client: {str(e)}")
         raise HTTPException(
-            status_code=500,
+            status_code=402,
             detail=f"Failed to initialize exchange client: {str(e)}"
         )
 
@@ -85,7 +85,10 @@ def get_symbol_price(
 
 @router.post("/{account_id}/order",
     responses={
+        400: {"description": "Bad Request"},
         404: {"description": "Trading account not found"},
+        403: {"description": "Trading account is not active"},
+        402: {"description": "Failed to initialize exchange client"},
         422: {"description": "Validation Error"},
         502: {"description": "Exchange API Error"}
     }
@@ -101,6 +104,7 @@ def create_order(
     1. Specify quantity: Amount of base asset to trade
     2. Specify quote_order_qty: Amount of USDT to spend (only for BUY orders)
     """
+    # Let any exceptions from get_mexc_spot_client propagate up
     client = get_mexc_spot_client(account_id, db)
     
     # Build parameters dict with only provided values
@@ -118,18 +122,8 @@ def create_order(
     if order.quote_order_qty is not None:
         params['quote_order_qty'] = order.quote_order_qty
 
-    try:
-        response = client.create_order(**params)
-        return response
-    except ExchangeAPIError as e:
-        raise HTTPException(
-            status_code=502,
-            detail={
-                "type": "exchange_api_error",
-                "message": str(e),
-                "exchange": "MEXC"
-            }
-        )
+    # Let any exceptions from create_order propagate up
+    return client.create_order(**params)
 
 @router.delete("/{account_id}/order/{symbol}/{order_id}")
 def cancel_order(
