@@ -1,6 +1,6 @@
 # app/schemas.py
 
-from pydantic import BaseModel, EmailStr, Field, validator
+from pydantic import BaseModel, EmailStr, Field, validator, field_validator, model_validator, ValidationInfo
 from datetime import datetime
 from typing import List, Optional, Dict, Union, Any
 from enum import Enum
@@ -413,30 +413,71 @@ class MEXCOrderCreate(BaseModel):
     type: MEXCOrderType
     quantity: Optional[float] = None
     price: Optional[float] = None
-    quote_order_qty: Optional[float] = None  # Amount in USDT to spend
+    quote_order_qty: Optional[float] = None
 
-    @validator('quote_order_qty')
-    def validate_quote_order_qty(cls, v, values):
+    # Field-level validators (Pydantic v2 uses @field_validator)
+    @field_validator('symbol')
+    def validate_symbol(cls, v):
+        if v != v.upper():
+            raise ValueError("Symbol must be uppercase")
+        if not v.endswith('USDT'):
+            raise ValueError("Symbol must end with USDT")
+        if len(v) < 5:
+            raise ValueError("Invalid symbol format")
+        return v
+
+    @field_validator('quote_order_qty')
+    def validate_quote_order_qty(cls, v, info: ValidationInfo):
+        # Only validate if quote_order_qty is not None
         if v is not None:
-            if values.get('side') != MEXCOrderSide.BUY:
+            if info.data.get('side') != MEXCOrderSide.BUY:
                 raise ValueError("quote_order_qty can only be used with BUY orders")
-            if values.get('type') != MEXCOrderType.MARKET:
+            if info.data.get('type') != MEXCOrderType.MARKET:
                 raise ValueError("quote_order_qty can only be used with MARKET orders")
         return v
 
-    @validator('quantity', 'price')
-    def validate_order_params(cls, v, values):
-        order_type = values.get('type')
+    @model_validator(mode='after')
+    def validate_order_requirements(self):
+        order_type = self.type
+        side = self.side
+        quantity = self.quantity
+        quote_order_qty = self.quote_order_qty
+        price = self.price
+
         if order_type == MEXCOrderType.LIMIT:
-            if not values.get('quantity'):
+            if quote_order_qty is not None:
+                raise ValueError("quote_order_qty cannot be used with Limit orders")
+            if quantity is None:
                 raise ValueError("quantity is required for LIMIT orders")
-            if not values.get('price'):
+            if price is None:
                 raise ValueError("price is required for LIMIT orders")
         elif order_type == MEXCOrderType.MARKET:
-            if values.get('quote_order_qty') is None and values.get('quantity') is None:
-                raise ValueError("Either quantity or quote_order_qty must be provided for MARKET orders")
-        return v
+            if side == MEXCOrderSide.SELL:
+                if quantity is None:
+                    raise ValueError("Market Sell orders require quantity")
+                if quote_order_qty is not None:
+                    raise ValueError("quote_order_qty cannot be used with Market Sell orders")
+            elif side == MEXCOrderSide.BUY:
+                if quote_order_qty is None and quantity is None:
+                    raise ValueError("Market Buy orders require either quantity or quote_order_qty")
 
+        return self
+
+    class Config:
+        json_schema_extra = {
+            "examples": [
+                {
+                    "summary": "Market Buy (Spend USDT)",
+                    "value": {
+                        "symbol": "BTCUSDT",
+                        "side": "BUY",
+                        "type": "MARKET",
+                        "quote_order_qty": 100
+                    }
+                },
+                # ...other examples...
+            ]
+        }
 class MEXCOrderTest(BaseModel):
     """Schema for testing MEXC orders without actually placing them"""
     symbol: str

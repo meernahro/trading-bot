@@ -78,4 +78,7 @@ def validate_symbol(symbol: str) -> None:
     if not symbol.isupper():
         raise ValidationError("Symbol must be uppercase")
     if len(symbol) < 5:  # Minimum length for valid trading pair
-        raise ValidationError("Invalid symbol format") 
+        raise ValidationError("Invalid symbol format")
+    if not symbol.endswith('USDT'):
+        raise ValidationError("Symbol must end with USDT")
+ 

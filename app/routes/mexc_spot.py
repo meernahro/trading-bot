@@ -7,6 +7,8 @@ from ..database import get_db
 from ..exchanges.factory import ExchangeClientFactory
 from ..utils.exceptions import ExchangeAPIError
 from ..utils.customLogger import get_logger
+from ..utils.validation import validate_symbol
+from pydantic import ValidationError
 
 logger = get_logger(__name__)
 
@@ -81,7 +83,13 @@ def get_symbol_price(
     except ExchangeAPIError as e:
         raise HTTPException(status_code=502, detail=str(e))
 
-@router.post("/{account_id}/order")
+@router.post("/{account_id}/order",
+    responses={
+        404: {"description": "Trading account not found"},
+        422: {"description": "Validation Error"},
+        502: {"description": "Exchange API Error"}
+    }
+)
 def create_order(
     account_id: int,
     order: schemas.MEXCOrderCreate,
@@ -94,17 +102,34 @@ def create_order(
     2. Specify quote_order_qty: Amount of USDT to spend (only for BUY orders)
     """
     client = get_mexc_spot_client(account_id, db)
+    
+    # Build parameters dict with only provided values
+    params = {
+        'symbol': order.symbol,
+        'side': order.side,
+        'order_type': order.type
+    }
+
+    # Add optional parameters only if they are provided
+    if order.quantity is not None:
+        params['quantity'] = order.quantity
+    if order.price is not None:
+        params['price'] = order.price
+    if order.quote_order_qty is not None:
+        params['quote_order_qty'] = order.quote_order_qty
+
     try:
-        return client.create_order(
-            symbol=order.symbol,
-            side=order.side,
-            order_type=order.type,
-            quantity=order.quantity,
-            price=order.price,
-            quote_order_qty=order.quote_order_qty
-        )
+        response = client.create_order(**params)
+        return response
     except ExchangeAPIError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "type": "exchange_api_error",
+                "message": str(e),
+                "exchange": "MEXC"
+            }
+        )
 
 @router.delete("/{account_id}/order/{symbol}/{order_id}")
 def cancel_order(

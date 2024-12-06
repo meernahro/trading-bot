@@ -96,16 +96,10 @@ class MEXCSpotClient(ExchangeClientBase):
             if order_type.upper() == 'MARKET':
                 if quote_order_qty and side.upper() == 'BUY':
                     options['quoteOrderQty'] = quote_order_qty
-                elif quantity:
+                if quantity:
                     options['quantity'] = quantity
-                else:
-                    raise ValueError("Either quantity or quote_order_qty must be provided for market orders")
                 
             elif order_type.upper() == 'LIMIT':
-                if not price:
-                    raise ValueError("Price is required for LIMIT orders")
-                if not quantity:
-                    raise ValueError("Quantity is required for LIMIT orders")
                 options['quantity'] = quantity
                 options['price'] = price
                 options['timeInForce'] = kwargs.get('time_in_force', 'GTC')
