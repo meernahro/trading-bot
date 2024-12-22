@@ -45,3 +45,4 @@ jobs:
             # Cleanup unused Docker images and containers
             docker image prune
             docker container prune -f
+            
