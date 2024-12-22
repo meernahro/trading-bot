@@ -38,9 +38,9 @@ jobs:
             mkdir -p data
 
             # Build and start the containers
-            docker-compose down
-            docker-compose build
-            docker-compose up -d
+            docker compose down
+            docker compose build
+            docker compose up -d
 
             # Cleanup unused Docker images and containers
             docker image prune
